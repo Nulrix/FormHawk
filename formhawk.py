@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 
+#!/usr/bin/env python3
 """
 FormHawk — Form & Endpoint Mapper with Passive Security Checks (MVP)
 
@@ -35,6 +35,9 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
+
+# Create a global console for printing across functions
+console = Console()
 
 
 # ---- Helper functions ----
@@ -317,7 +320,7 @@ async def active_reflection_probe(base_url: str, pages: dict, max_tests: int, co
 
 def summarize(report: dict, reflections: list[dict] | None) -> None:
     """Print a summary table of the report and optionally reflection probe results."""
-    console = Console()
+    local_console = Console()
     t = Table(title="FormHawk Summary", box=box.SIMPLE_HEAVY)
     t.add_column("URL", overflow="fold")
     t.add_column("Status")
@@ -333,15 +336,15 @@ def summarize(report: dict, reflections: list[dict] | None) -> None:
         cookie_issues = ", ".join(p.get("cookie_audit", {}).get("issues", [])[:2])
         header_hints = ", ".join(p.get("header_audit", {}).get("hints", [])[:2])
         t.add_row(url, str(p.get("status")), str(forms), str(params), cookie_issues, header_hints)
-    console.print(t)
+    local_console.print(t)
     if reflections is not None:
-        rtab = Table(title="Active Reflection Probe (GET‑only)", box=box.SIMPLE_HEAVY)
+        rtab = Table(title="Active Reflection Probe (GET-only)", box=box.SIMPLE_HEAVY)
         rtab.add_column("URL", overflow="fold")
         rtab.add_column("Status")
         rtab.add_column("Reflected?")
         for r in reflections[:50]:
             rtab.add_row(r.get("url", ""), str(r.get("status", "-")), "YES" if r.get("reflected") else "no")
-        console.print(rtab)
+        local_console.print(rtab)
 
 
 def parse_args() -> argparse.Namespace:
@@ -389,7 +392,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--active",
         action="store_true",
-        help="Enable GET‑only reflection probe (adds benign marker)",
+        help="Enable GET-only reflection probe (adds benign marker)",
     )
     p.add_argument(
         "--max-active",
@@ -413,18 +416,22 @@ def main() -> None:
             style="bold",
         )
         return
+
     console.print(
         Panel(
             f"[bold]FormHawk[/bold] — passive crawl of [cyan]{base}[/cyan]\n[dim]Use only with permission[/dim]"
         )
+    )
+
     report = asyncio.run(
         crawl(base, args.depth, args.max_urls, args.concurrency, args.rps)
     )
+
     reflections = None
     if args.active:
         console.print(
             Panel(
-                "[yellow]Active reflection probe enabled (GET‑only, benign marker)[/yellow]"
+                "[yellow]Active reflection probe enabled (GET-only, benign marker)[/yellow]"
             )
         )
         reflections = asyncio.run(
@@ -433,10 +440,12 @@ def main() -> None:
             )
         )
         report["active_reflection"] = reflections
+
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2)
         console.print(Panel(f"Saved JSON report to [green]{args.out}[/green]"))
+
     summarize(report, reflections)
     console.print(
         Panel(
